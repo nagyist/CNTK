@@ -52,7 +52,15 @@
   %csmethodmodifiers namespace##::##method "private";
   %rename (_##method) namespace##::##method
 %enddef
-#endif
+#endif //SWIGCSHARP
+
+#ifdef SWIGJAVA
+#define %make_private(x) %javamethodmodifiers x "private"
+%define %rename_and_make_private(namespace, method)
+  %javamethodmodifiers namespace##::##method "private";
+  %rename (_##method) namespace##::##method
+%enddef
+#endif //SWIGJAVA
 
 %{
     #include "CNTKLibrary.h"
@@ -496,11 +504,14 @@ RENAME_AND_MAKE_PRIVATE(CNTK::Function, Clone);
 %rename (toString) CNTK::Function::AsString;
 #endif
 
+// TODO: also apply to Java when possible.
+#ifdef SWIGCSHARP
 %rename_and_make_private(CNTK::Function, Evaluate);
 %rename_and_make_private(CNTK::Function, Load);
 %rename_and_make_private(CNTK::Function, FindByName);
 %rename_and_make_private(CNTK::Function, FindAllWithName);
 %rename_and_make_private(CNTK::Function, Clone);
+#endif // SWIGCSHARP
 
 // Ignore exposing istream to C# for now. Todo: find a good solution to map C# System.IO.Stream to std::istream.
 %ignore CNTK::Function::Load(std::istream& inputStream, const DeviceDescriptor& computeDevice= DeviceDescriptor::UseDefaultDevice());
@@ -684,7 +695,7 @@ RENAME_AND_MAKE_PRIVATE(CNTK::Value, IsValid);
 %make_private(CNTK::Value::CopyVariableValueToDouble);
 %make_private(CNTK::Value::Create);
 %rename_and_make_private(CNTK::Value, Alias);
-#endif
+#endif // SWIGCSHARP
 
 %include "CNTKValueExtend.i"
 
