@@ -467,6 +467,7 @@ RENAME_AND_MAKE_PRIVATE(CNTK::Axis, IsOrdered);
 // class Function
 %ignore CNTK::Function::BlockArgumentsMapping;
 %ignore CNTK::GetCorrespondingOutputVariableFromClone;
+
 MAKE_GETTER(CNTK::Function, Name);
 MAKE_GETTER(CNTK::Function, Uid);
 MAKE_GETTER(CNTK::Function, RootFunction);
@@ -495,11 +496,14 @@ RENAME_AND_MAKE_PRIVATE(CNTK::Function, Clone);
 %rename (toString) CNTK::Function::AsString;
 #endif
 
-// Ignore exposing istream to C# for now. Todo: find a good solution to map C# System.IO.Stream to std::istream.
-%ignore CNTK::Function::Load(std::istream& inputStream, const DeviceDescriptor& computeDevice= DeviceDescriptor::UseDefaultDevice());
-
 %rename_and_make_private(CNTK::Function, Evaluate);
 %rename_and_make_private(CNTK::Function, Load);
+%rename_and_make_private(CNTK::Function, FindByName);
+%rename_and_make_private(CNTK::Function, FindAllWithName);
+%rename_and_make_private(CNTK::Function, Clone);
+
+// Ignore exposing istream to C# for now. Todo: find a good solution to map C# System.IO.Stream to std::istream.
+%ignore CNTK::Function::Load(std::istream& inputStream, const DeviceDescriptor& computeDevice= DeviceDescriptor::UseDefaultDevice());
 
 %ignore CNTK::Function::RegisterUDFDeserializeCallback;
 %ignore CNTK::Function::GetUDFDeserializeCallback;
