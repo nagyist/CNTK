@@ -539,6 +539,7 @@ RENAME_AND_MAKE_PRIVATE(CNTK::Function, Clone);
 %ignore CNTK::Variable::Variable;
 %ignore CNTK::Variable::operator FunctionPtr;
 %rename ("%s") CNTK::Variable::Variable(const FunctionPtr& function);
+<<<<<<< 4b4cf975110f13ad85bbea11fe7416c0c676a12d
 MAKE_GETTER(CNTK::Variable, Shape);
 MAKE_GETTER(CNTK::Variable, Name);
 MAKE_GETTER(CNTK::Variable, Uid);
@@ -575,6 +576,29 @@ RENAME_AND_MAKE_PRIVATE(CNTK::NDShape, HasFreeDimension);
 %rename (subShape) CNTK::NDShape::SubShape;
 %rename (toString) CNTK::NDShape::AsString;
 #endif
+=======
+%rename (GetShape) CNTK::Variable::Shape;
+%rename (GetName) CNTK::Variable::Name;
+%rename (GetVariableKind) CNTK::Variable::Kind;
+%rename (GetDynamicAxes) CNTK::Variable::DynamicAxes;
+%rename (_IsSparse) CNTK::Variable::IsSparse;
+%rename (_IsInput) CNTK::Variable::IsInput;
+%rename (_IsOutput) CNTK::Variable::IsOutput;
+%rename (_IsParameter) CNTK::Variable::IsParameter;
+%rename (_IsConstant) CNTK::Variable::IsConstant;
+%rename (_IsPlaceholder) CNTK::Variable::IsPlaceholder;
+%rename (_NeedsGradient) CNTK::Variable::NeedsGradient;
+%rename (GetOwner) CNTK::Variable::Owner;
+
+// class NDShape
+%rename (GetDimensions) CNTK::NDShape::Dimensions;
+%rename (GetRank) CNTK::NDShape::Rank;
+%rename (GetTotalSize) CNTK::NDShape::TotalSize;
+%rename (_IsUnknown) CNTK::NDShape::IsUnknown;
+%rename (_HasInferredDimension) CNTK::NDShape::HasInferredDimension;
+%rename (_HasFreeDimension) CNTK::NDShape::HasFreeDimension;
+%rename (_HasUnboundDimension) CNTK::NDShape::HasUnboundDimension;
+>>>>>>> make more methods private; add missing methods to C#
 
 %ignore CNTK::NDShape::NDShape(const std::initializer_list<size_t>& dimensions);
 %ignore CNTK::NDShape::InferredDimension;
@@ -586,6 +610,7 @@ RENAME_AND_MAKE_PRIVATE(CNTK::NDShape, HasFreeDimension);
         return (*self)[axisId];
     }
 }
+%make_private(CNTK::NDShape::GetDimensionSize);
 
 // class NDMask
 // Todo: add correct typemap as they might be useful in future.
@@ -654,6 +679,11 @@ RENAME_AND_MAKE_PRIVATE(CNTK::Value, IsValid);
 %make_private(CNTK::Value::CreateSequenceDouble);
 %make_private(CNTK::Value::CreateOneHotFloat);
 %make_private(CNTK::Value::CreateOneHotDouble);
+%make_private(CNTK::Value::CopyVariableValueTo);
+%make_private(CNTK::Value::CopyVariableValueToFloat);
+%make_private(CNTK::Value::CopyVariableValueToDouble);
+%make_private(CNTK::Value::Create);
+%rename_and_make_private(CNTK::Value, Alias);
 #endif
 
 %include "CNTKValueExtend.i"
@@ -662,6 +692,10 @@ RENAME_AND_MAKE_PRIVATE(CNTK::Value, IsValid);
 %ignore CNTK::NDArrayView::NDArrayView(::CNTK::DataType dataType, const NDShape& viewShape, void* dataBuffer, size_t bufferSizeInBytes, const DeviceDescriptor& device, bool readOnly = false);
 %ignore CNTK::NDArrayView::NDArrayView(::CNTK::DataType dataType, const NDShape& viewShape, const void* dataBuffer, size_t bufferSizeInBytes, const DeviceDescriptor& device);
 %ignore CNTK::NDArrayView::NDArrayView(double value, DataType dataType = DataType::Float, const NDShape& viewShape = { 1 }, const DeviceDescriptor& device = DeviceDescriptor::UseDefaultDevice(), bool readOnly = false);
+
+#ifdef SWIGCSHARP
+%rename_and_make_private(CNTK::NDArrayView, Alias);
+#endif
 
 %extend CNTK::NDArrayView {
     NDArrayView(const NDShape& viewShape, float *dataBuffer, size_t numBufferElements, const DeviceDescriptor& device, bool readOnly = false)

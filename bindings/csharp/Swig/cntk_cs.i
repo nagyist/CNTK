@@ -461,6 +461,12 @@
         get { return GetOwner(); }
     }
 
+    // Property NeedsGradient.
+    public bool NeedsGradient
+    {
+        get { return _NeedsGradient(); }
+    }
+
     // Value equality.
     public override bool Equals(System.Object obj)
     {
@@ -557,6 +563,12 @@
     public bool HasFreeDimension
     {
         get { return _HasFreeDimension(); }
+    }
+
+    // Property HasUnboundDimension.
+    public bool HasUnboundDimension
+    {
+        get { return _HasUnboundDimension(); }
     }
 
     // Property TotalSize.
@@ -1248,6 +1260,11 @@
         return;
     }
 
+    // Creates a new Value which is an alias of this Value.
+    public Value Alias(bool readOnly = false)
+    {
+        return _Alias(readOnly);
+    }
 
 %}
 
@@ -1351,6 +1368,12 @@
         var extentVector = Helper.AsSizeTVector(extent);
 
         return _SliceView(startOffsetVector, extentVector, readOnly);
+    }
+
+    // Creates a new NDArrayView which is an alias of this NDArrayView.
+    public NDArrayView Alias(bool readOnly = false)
+    {
+        return _Alias(readOnly);
     }
 %}
 
