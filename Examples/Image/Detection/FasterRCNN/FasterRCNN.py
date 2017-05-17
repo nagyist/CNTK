@@ -11,12 +11,27 @@ import os, sys
 abs_path = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(abs_path, ".."))
 
+try:
+    import cv2
+except ImportError:
+    import pip
+    pip.main(['install', '--user', 'opencv-python'])
+    import cv2
+
+try:
+    import yaml
+except ImportError:
+    import pip
+    pip.main(['install', '--user', 'pyyaml'])
+    import yaml
+
+#import cv2
+import argparse
 from matplotlib.pyplot import imsave
 from PIL import ImageFont
-import cv2
 import cntk
 from cntk import Trainer, UnitType, load_model, user_function, Axis, input, parameter, times, combine, relu, \
-    softmax, roipooling, reduce_sum, slice, splice, reshape, plus, CloneMethod, minus, element_times, alias
+    softmax, roipooling, reduce_sum, slice, splice, reshape, plus, CloneMethod, minus, element_times, alias, Communicator
 from cntk.io import MinibatchSource, ImageDeserializer, CTFDeserializer, StreamDefs, StreamDef, TraceLevel
 from cntk.io.transforms import scale
 from cntk.initializer import glorot_uniform, normal
@@ -49,7 +64,9 @@ reader_trace_level = TraceLevel.Error
 # stream names and paths
 features_stream_name = 'features'
 roi_stream_name = 'roiAndLabel'
-output_path = os.path.join(abs_path, "Output")
+
+globalvars = {}
+globalvars['output_path'] = os.path.join(abs_path, "Output")
 
 num_input_rois = cfg["CNTK"].INPUT_ROIS_PER_IMAGE
 num_channels = 3
@@ -66,10 +83,10 @@ if dataset == "Grocery":
                'avocado', 'orange', 'butter', 'champagne', 'eggBox', 'gerkin', 'joghurt', 'ketchup',
                'orangeJuice', 'onion', 'pepper', 'tomato', 'water', 'milk', 'tabasco', 'mustard')
     base_path = os.path.join(abs_path, "Data", "Grocery")
-    train_map_file = os.path.join(base_path, "train.imgMap.txt")
-    test_map_file = os.path.join(base_path, "test.imgMap.txt")
-    train_roi_file = os.path.join(base_path, "train.GTRois.txt")
-    test_roi_file = os.path.join(base_path, "test.GTRois.txt")
+    globalvars['train_map_file'] = "train.imgMap.txt"
+    globalvars['test_map_file'] = "test.imgMap.txt"
+    globalvars['train_roi_file'] = "train.GTRois.txt"
+    globalvars['test_roi_file'] = "test.GTRois.txt"
     num_classes = len(classes)
     epoch_size = 20
     num_test_images = 5
@@ -78,13 +95,13 @@ elif dataset == "Pascal":
                'aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car', 'cat', 'chair', 'cow', 'diningtable',
                'dog', 'horse', 'motorbike', 'person', 'pottedplant', 'sheep', 'sofa', 'train', 'tvmonitor')
     base_path = os.path.join(abs_path, "Data", "Pascal")
-    train_map_file = os.path.join(base_path, "trainval2007.txt")
-    test_map_file = os.path.join(base_path, "test2007.txt")
-    train_roi_file = os.path.join(base_path, "trainval2007_rois_topleft_wh_rel.txt")
-    test_roi_file = os.path.join(base_path, "test2007_rois_topleft_wh_rel.txt")
+    globalvars['train_map_file'] = "trainval2007.txt"
+    globalvars['test_map_file'] = "test2007.txt"
+    globalvars['train_roi_file'] = "trainval2007_rois_topleft_wh_rel.txt"
+    globalvars['test_roi_file'] = "test2007_rois_topleft_wh_rel.txt"
     num_classes = len(classes)
-    epoch_size = 500 # 5010
-    num_test_images = 4952
+    epoch_size = 5010
+    num_test_images = 100 # 4952
 else:
     raise ValueError('unknown data set: %s' % dataset)
 
@@ -160,6 +177,57 @@ def get_4stage_learning_parameters():
         lrp['frcn_lr_per_sample'] =  [x * 0.01 for x in lrp['frcn_lr_per_sample']]
 
     return lrp
+
+def parse_arguments():
+    parser = argparse.ArgumentParser()
+
+    data_path = base_path
+    parser.add_argument('-datadir', '--datadir', help='Data directory where the ImageNet dataset is located',
+                        required=False, default=data_path)
+    parser.add_argument('-outputdir', '--outputdir', help='Output directory for checkpoints and models',
+                        required=False, default=None)
+    parser.add_argument('-logdir', '--logdir', help='Log file',
+                        required=False, default=None)
+    parser.add_argument('-n', '--num_epochs', help='Total number of epochs to train', type=int,
+                        required=False, default=max_epochs)
+    parser.add_argument('-m', '--minibatch_size', help='Minibatch size', type=int,
+                        required=False, default=mb_size)
+    parser.add_argument('-e', '--epoch_size', help='Epoch size', type=int,
+                        required=False, default=epoch_size)
+    parser.add_argument('-q', '--quantized_bits', help='Number of quantized bits used for gradient aggregation', type=int,
+                        required=False, default='32')
+    parser.add_argument('-r', '--restart',
+                        help='Indicating whether to restart from scratch (instead of restart from checkpoint file by default)',
+                        action='store_true')
+    parser.add_argument('-device', '--device', type=int, help="Force to run the script on a specified device",
+                        required=False, default=None)
+
+    args = vars(parser.parse_args())
+
+    if args['outputdir'] is not None:
+        globalvars['output_path'] = args['outputdir']
+    if args['logdir'] is not None:
+        log_dir = args['logdir']
+    if args['device'] is not None:
+        # Setting one worker on GPU and one worker on CPU. Otherwise memory consumption is too high for a single GPU.
+        if Communicator.rank() == 0:
+            cntk.device.try_set_default_device(cntk.device.gpu(args['device']))
+        else:
+            cntk.device.try_set_default_device(cntk.device.cpu())
+
+    if args['datadir'] is not None:
+        data_path = args['datadir']
+
+    if not os.path.isdir(data_path):
+        raise RuntimeError("Directory %s does not exist" % data_path)
+
+    globalvars['train_map_file'] = os.path.join(data_path, globalvars['train_map_file'])
+    globalvars['test_map_file'] = os.path.join(data_path, globalvars['test_map_file'])
+    globalvars['train_roi_file'] = os.path.join(data_path, globalvars['train_roi_file'])
+    globalvars['test_roi_file'] = os.path.join(data_path, globalvars['test_roi_file'])
+
+###############################################################
+###############################################################
 
 # Instantiates a composite minibatch source for reading images, roi coordinates and roi labels for training Fast R-CNN
 def create_mb_source(img_map_file, roi_map_file, img_height, img_width, img_channels, n_rois, randomize=True):
@@ -306,7 +374,7 @@ def train_model(image_input, roi_input, loss, pred_error,
     trainer = Trainer(None, (loss, pred_error), learner)
 
     # Create the minibatch source
-    minibatch_source = create_mb_source(train_map_file, train_roi_file,
+    minibatch_source = create_mb_source(globalvars['train_map_file'], globalvars['train_roi_file'],
         image_height, image_width, num_channels, num_input_rois)
 
     # define mapping from reader streams to network inputs
@@ -345,8 +413,8 @@ def train_faster_rcnn_e2e(debug_output=False):
     predictions, loss, pred_error = faster_rcnn_predictor(image_input, scaled_gt_boxes)
 
     if debug_output:
-        print("Storing graphs and models to %s." % output_path)
-        plot(loss, os.path.join(output_path, "graph_frcn_train_e2e." + graph_type))
+        print("Storing graphs and models to %s." % globalvars['output_path'])
+        plot(loss, os.path.join(globalvars['output_path'], "graph_frcn_train_e2e." + graph_type))
 
     # Set learning parameters
     # Caffe Faster R-CNN parameters are:
@@ -400,7 +468,7 @@ def train_faster_rcnn_alternating(debug_output=False):
     frcn_lr_schedule = learning_rate_schedule(lrp['frcn_lr_per_sample'], unit=UnitType.sample)
 
     if debug_output:
-        print("Storing graphs and models to %s." % output_path)
+        print("Storing graphs and models to %s." % globalvars['output_path'])
         print("Using base model: {}".format(base_model_to_use))
         print("rpn_lr_per_sample: {}".format(lrp['rpn_lr_per_sample']))
         print("rpn_epochs: {}".format(rpn_epochs))
@@ -444,7 +512,7 @@ def train_faster_rcnn_alternating(debug_output=False):
         rpn_rois, rpn_losses = create_rpn(conv_out, scaled_gt_boxes, im_info, cfg)
 
         stage1_rpn_network = combine([rpn_rois, rpn_losses])
-        if debug_output: plot(stage1_rpn_network, os.path.join(output_path, "graph_frcn_train_stage1a_rpn." + graph_type))
+        if debug_output: plot(stage1_rpn_network, os.path.join(globalvars['output_path'], "graph_frcn_train_stage1a_rpn." + graph_type))
 
         # train
         train_model(image_input, roi_input, rpn_losses, rpn_losses,
@@ -499,7 +567,7 @@ def train_faster_rcnn_alternating(debug_output=False):
         detection_losses = plus(reduce_sum(loss_cls), reduce_sum(loss_box), name="detection_losses")
 
         stage1_frcn_network = combine([rois, cls_score, bbox_pred, rpn_losses, detection_losses])
-        if debug_output: plot(stage1_frcn_network, os.path.join(output_path, "graph_frcn_train_stage1b_frcn." + graph_type))
+        if debug_output: plot(stage1_frcn_network, os.path.join(globalvars['output_path'], "graph_frcn_train_stage1b_frcn." + graph_type))
 
         train_model(image_input, roi_input, detection_losses, detection_losses,
                     frcn_lr_schedule, mm_schedule, l2_reg_weight, epochs_to_train=frcn_epochs)
@@ -532,7 +600,7 @@ def train_faster_rcnn_alternating(debug_output=False):
         rpn_losses = rpn_net.outputs[1]
 
         stage2_rpn_network = combine([rpn_rois, rpn_losses])
-        if debug_output: plot(stage2_rpn_network, os.path.join(output_path, "graph_frcn_train_stage2a_rpn." + graph_type))
+        if debug_output: plot(stage2_rpn_network, os.path.join(globalvars['output_path'], "graph_frcn_train_stage2a_rpn." + graph_type))
 
         # train
         train_model(image_input, roi_input, rpn_losses, rpn_losses,
@@ -567,7 +635,7 @@ def train_faster_rcnn_alternating(debug_output=False):
         stage2_frcn_network = frcn(conv_out, rpn_rois, scaled_gt_boxes)
         detection_losses = stage2_frcn_network.outputs[3]
 
-        if debug_output: plot(stage2_frcn_network, os.path.join(output_path, "graph_frcn_train_stage2b_frcn." + graph_type))
+        if debug_output: plot(stage2_frcn_network, os.path.join(globalvars['output_path'], "graph_frcn_train_stage2b_frcn." + graph_type))
 
         train_model(image_input, roi_input, detection_losses, detection_losses,
                     frcn_lr_schedule, mm_schedule, l2_reg_weight, epochs_to_train=frcn_epochs)
@@ -620,9 +688,9 @@ def regress_rois(roi_proposals, roi_regression_factors, labels):
 # Tests a Faster R-CNN model and plots images with detected boxes
 def eval_faster_rcnn_plot(eval_model, num_images_to_plot, debug_output=False):
     # get image paths
-    with open(test_map_file) as f:
+    with open(globalvars['test_map_file']) as f:
         content = f.readlines()
-    img_base_path = os.path.dirname(os.path.abspath(test_map_file))
+    img_base_path = os.path.dirname(os.path.abspath(globalvars['test_map_file']))
     img_file_names = [os.path.join(img_base_path, x.split('\t')[1]) for x in content]
 
     # prepare model
@@ -631,7 +699,7 @@ def eval_faster_rcnn_plot(eval_model, num_images_to_plot, debug_output=False):
 
     num_eval = min(num_test_images, num_images_to_plot)
     print("Evaluating Faster R-CNN model for %s images." % num_eval)
-    results_base_path = os.path.join(output_path, dataset)
+    results_base_path = os.path.join(globalvars['output_path'], dataset)
     for i in range(0, num_eval):
         imgPath = img_file_names[i]
 
@@ -722,7 +790,8 @@ if __name__ == '__main__':
     #plot(dummy, r"C:\Temp\Yuxiao_20170426_converted_models\VGG16_Faster-RCNN_VOC.pdf")
     #import pdb; pdb.set_trace()
 
-    model_path = os.path.join(abs_path, "Output", "faster_rcnn_eval_{}_{}.model"
+    parse_arguments()
+    model_path = os.path.join(globalvars['output_path'], "faster_rcnn_eval_{}_{}.model"
                               .format(base_model_to_use, "e2e" if train_e2e else "4stage"))
 
     # Train only if no model exists yet
@@ -740,12 +809,12 @@ if __name__ == '__main__':
         eval_model = create_eval_model(trained_model, image_input)
         eval_model.save(model_path)
         if DEBUG_OUTPUT:
-            plot(eval_model, os.path.join(output_path, "graph_frcn_eval_{}_{}.{}"
+            plot(eval_model, os.path.join(globalvars['output_path'], "graph_frcn_eval_{}_{}.{}"
                                           .format(base_model_to_use, "e2e" if train_e2e else "4stage", graph_type)))
 
         print("Stored eval model at %s" % model_path)
 
     # Evaluate the test set
-    #eval_faster_rcnn_mAP(eval_model, test_map_file, test_roi_file)
+    #eval_faster_rcnn_mAP(eval_model, globalvars['test_map_file'], globalvars['test_roi_file'])
     if DEBUG_OUTPUT:
         eval_faster_rcnn_plot(eval_model, num_images_to_plot=500, debug_output=True)
