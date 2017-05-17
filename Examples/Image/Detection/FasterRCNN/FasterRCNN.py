@@ -25,7 +25,6 @@ except ImportError:
     pip.main(['install', '--user', 'pyyaml'])
     import yaml
 
-#import cv2
 import argparse
 from matplotlib.pyplot import imsave
 from PIL import ImageFont
@@ -785,9 +784,10 @@ if __name__ == '__main__':
     if not os.path.exists(os.path.join(abs_path, "Output", "Pascal")):
         os.makedirs(os.path.join(abs_path, "Output", "Pascal"))
 
-    #caffe_model = r"C:\Temp\Yuxiao_20170428_converted_models\VGG16_Faster-RCNN_VOC.cntkmodel"
+    #import pdb; pdb.set_trace()
+    #caffe_model = r"C:\Temp\Yuxiao_20170428_converted_models\VGG16_faster_rcnn_final.cntkmodel"
     #dummy = load_model(caffe_model)
-    #plot(dummy, r"C:\Temp\Yuxiao_20170426_converted_models\VGG16_Faster-RCNN_VOC.pdf")
+    #plot(dummy, r"C:\Temp\Yuxiao_20170428_converted_models\VGG16_faster_rcnn_final.cntkmodel.pdf")
     #import pdb; pdb.set_trace()
 
     parse_arguments()
